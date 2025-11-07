@@ -1,0 +1,174 @@
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #eba272;
+  color: #ffffff
+}
+
+header {
+  background: linear-gradient(90deg, #ffb07c 0%, #ff5e62 100%);
+  padding: 1rem 0;
+  text-align: center;
+  box-shadow: none;
+  margin-bottom: 50px;
+}
+
+main {
+  max-width: 1400px;
+  width: 90%;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #000000 0%, #ff5e62 100%);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(255, 94, 98, 0.18);
+  padding: 1rem;
+  color: #fff;
+}
+
+main a {
+  color: #ffb07c;
+  text-decoration: none;
+}
+
+main p {
+  font-size: 1.2rem;
+  line-height: 1.6;
+}
+
+footer {
+  text-align: center;
+  padding: 1.5rem 0;
+  background: linear-gradient(90deg, #ffb07c 0%, #ff5e62 100%);
+  font-size: 1rem;
+  letter-spacing: 1px;
+  color: #fff;
+  margin-top: 50px;
+}
+
+nav {
+  text-align: center;
+  margin: 1rem 0;
+}
+
+nav ul {
+  list-style: none;
+  display: flex;
+  gap: 2rem;
+  padding: 0;
+  margin: 0;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+nav hr {
+  width: 60%;
+  margin: 1rem auto;
+  border: 1px solid #ffffff;
+}
+
+a {
+  color: #6b0000;
+}
+
+a:hover {
+  color: #ffffff;
+}
+
+.sticky-div {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  z-index: 100;
+}
+
+.centered {
+  text-align: center;
+}
+
+.intro-img {
+  display: block;
+  width: 50%;
+  max-width: 1840px;
+  max-height: 160px;
+  height: 100%;
+  margin: 0 auto;
+}
+
+/* Rule Overrides For Laptops / Small Screens */
+@media screen and (max-width: 1400px) {
+
+  main {
+    width: 90%;
+    margin: 15px auto;
+  }
+
+  h1 {
+    font-size: 2.2rem;
+  }
+}
+
+/* Rule Overrides For Tablet Devices */
+@media screen and (max-width: 980px) {
+  main {
+    width: 95%;
+    margin: 10px auto;
+    padding: 15px;
+  }
+
+  h1 {
+    font-size: 2.0rem;
+  }
+}
+
+/* Rule Overrides For Mobile Devices */
+@media screen and (max-width: 600px) {
+  main {
+    width: 100%;
+    margin: 0;
+    padding: 10px;
+    border-radius: 0;
+  }
+
+  h1 {
+    font-size: 1.8rem;
+  }
+
+  .hide-on-mobile {
+    display: none;
+  }
+
+  .button-group {
+    flex-direction: column;
+  }
+
+}
+
+table {
+  width: 90%;
+  margin: 20px auto;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  border: 1px solid white;
+  padding: 12px;
+  text-align: left;
+  vertical-align: center;
+}
+
+th {
+  background-color: #c74646;
+  text-align: center !important;
+}
+
+td ul {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.validation-links img {
+  border: 0;
+  width: 88px;
+  height: 31px;
+}

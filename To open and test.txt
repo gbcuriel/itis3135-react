@@ -1,0 +1,1 @@
+In the powershell terminal go to itis3135-react folder and run npm run dev
