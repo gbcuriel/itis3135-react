@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-export default function Classmates() {
+export default function IntroPull() {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -104,8 +104,45 @@ export default function Classmates() {
     // Helper to remove surrounding quotes and extra whitespace
     const cleanQuoteString = (str) => {
         if (!str) return "";
-        // Regex replaces starting/ending quotes (straight or curly)
         return str.trim().replace(/^["“'‘\s]+|["”'’\s]+$/g, '');
+    };
+
+    // UPDATED Helper: Resolve Image URL using 'media.src'
+    const resolveImage = (student) => {
+        let foundImage = null;
+
+        // Priority 1: Check the specific structure from your JSON (student.media.src)
+        if (student.media && student.media.src) {
+            foundImage = student.media.src;
+        }
+
+        // Priority 2: Fallback to searching other keys/locations
+        if (!foundImage) {
+            const sources = [student, student.acf, student.data].filter(Boolean);
+            const imageKeys = ['image', 'avatar', 'photo', 'picture', 'featured_image', 'featured_media_src_url'];
+
+            for (const source of sources) {
+                for (const key of imageKeys) {
+                    const val = source[key];
+                    if (val) {
+                        if (typeof val === 'string') foundImage = val;
+                        else if (val.url) foundImage = val.url;
+                        else if (val.guid) foundImage = val.guid;
+                        if (foundImage) break;
+                    }
+                }
+                if (foundImage) break;
+            }
+        }
+
+        // 3. Process URL (Handle relative paths by prepending domain)
+        if (foundImage) {
+            if (foundImage.startsWith('/')) {
+                return `https://dvonb.xyz${foundImage}`;
+            }
+            return foundImage;
+        }
+        return null;
     };
 
     // --- 3. FILTERING & PAGINATION ---
@@ -116,7 +153,6 @@ export default function Classmates() {
         if (!email && name) email = generateEmail(name);
 
         // Check both intro and quote fields for search terms
-        // Added 'personalStatement' to intro search list as requested
         const intro = getField(student, "introduction", "intro", "bio", "description", "about_me", "personalStatement");
         const quote = getField(student, "quote", "tagline", "favorite_quote");
 
@@ -406,7 +442,6 @@ export default function Classmates() {
                                 let email = getField(student, "email", "user_email", "student_email", "contact_email");
                                 if (!email || email === "No Email") email = generateEmail(name);
 
-                                // Added personalStatement to intro priorities
                                 const intro = getField(student, "introduction", "intro", "bio", "description", "about_me", "personalStatement") || "";
 
                                 // Parse Quote Logic
@@ -414,7 +449,6 @@ export default function Classmates() {
                                 let quote = "";
                                 let quoteAuthor = getField(student, "quote_author", "author") || "";
 
-                                // 1. Try to parse JSON quote first
                                 if (rawQuote && typeof rawQuote === 'string' && rawQuote.trim().startsWith('{')) {
                                     try {
                                         const parsed = JSON.parse(rawQuote);
@@ -423,29 +457,19 @@ export default function Classmates() {
                                             if (parsed.author) quoteAuthor = parsed.author;
                                         }
                                     } catch (e) {
-                                        // Parsing failed, use raw string
                                         quote = rawQuote;
                                     }
                                 } else {
                                     quote = rawQuote;
                                 }
 
-                                // 2. Clean up any remaining double quotes from the string itself
                                 quote = cleanQuoteString(quote);
 
                                 const courses = getArrayField(student, "courses", "classes", "enrolled", "tags", "subjects");
                                 const displayTags = courses.length > 0 ? courses : [email, "ITIS 3135"];
 
-                                let image = null;
-                                const sources = [student, student.acf, student.data].filter(Boolean);
-                                for (const s of sources) {
-                                    if (s.image || s.avatar || s.photo) {
-                                        const raw = s.image || s.avatar || s.photo;
-                                        if (typeof raw === 'string') image = raw;
-                                        else if (raw && raw.url) image = raw.url;
-                                        if (image) break;
-                                    }
-                                }
+                                // Use updated helper to find image at media.src
+                                const image = resolveImage(student);
 
                                 return (
                                     <div key={student.id || index} className="cm-card">
@@ -468,10 +492,8 @@ export default function Classmates() {
                                         <div className="cm-content">
                                             <h3 className="cm-name">{name}</h3>
 
-                                            {/* Introduction - Now pulls from personalStatement if needed */}
                                             {intro && <div className="cm-intro">{intro}</div>}
 
-                                            {/* Quote - Cleaned up */}
                                             {quote && (
                                                 <div className="cm-quote">
                                                     "{quote}"
@@ -483,13 +505,22 @@ export default function Classmates() {
 
                                             <div className="cm-pills">
                                                 {displayTags.map((tag, idx) => {
-                                                    // Safe render logic for objects
                                                     let label = tag;
                                                     if (typeof tag === 'object' && tag !== null) {
-                                                        if (tag.dept && tag.num) label = `${tag.dept} ${tag.num}`;
-                                                        else if (tag.name) label = tag.name;
-                                                        else if (tag.code) label = tag.code;
-                                                        else label = "Class";
+                                                        const dept = tag.dept || "";
+                                                        const num = tag.num || "";
+                                                        const title = tag.title || tag.name || "";
+
+                                                        if (dept && num) {
+                                                            label = `${dept} ${num}`;
+                                                            if (title) label += ` — ${title}`;
+                                                        } else if (title) {
+                                                            label = title;
+                                                        } else if (tag.code) {
+                                                            label = tag.code;
+                                                        } else {
+                                                            label = "Class";
+                                                        }
                                                     }
                                                     return <span key={idx} className="cm-pill">{label}</span>;
                                                 })}
