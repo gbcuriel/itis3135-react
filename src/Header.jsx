@@ -31,6 +31,8 @@ export default function Header() {
                     <li><Link to="/Contract">Contract</Link></li>
                     <li>|</li>
                     <li><Link to="/Introduction">Introduction</Link></li>
+                    <li>|</li>
+                    <li><Link to="/IntroPull">JSON Pull</Link></li>
                 </ul>
             </nav>
         </header >

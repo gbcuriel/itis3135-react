@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronLeft, ChevronRight, User, Mail, School, Loader2 } from 'lucide-react';
 
-export default function Classmates() {
+export default function IntroPull() {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -42,9 +42,10 @@ export default function Classmates() {
 
     // 2. Filter Data (Search Logic)
     const filteredStudents = students.filter(student => {
-        const name = student.name || student.student_name || student.firstName || "Unknown";
-        const email = student.email || "";
-        const intro = student.introduction || student.bio || "";
+        // Robustly handle missing or non-string data
+        const name = String(student.name || student.student_name || student.firstName || "Unknown");
+        const email = String(student.email || "");
+        const intro = String(student.introduction || student.bio || "");
 
         const searchLower = searchTerm.toLowerCase();
         return name.toLowerCase().includes(searchLower) ||
@@ -125,9 +126,10 @@ export default function Classmates() {
                     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {currentStudents.map((student, index) => {
                             // Adjust these keys based on your actual API data
-                            const studentName = student.name || student.firstname || "Student";
-                            const studentEmail = student.email || "No email";
-                            const studentIntro = student.introduction || student.intro || "No introduction provided.";
+                            // Using String() wrapping to prevent 'Objects are not valid as React child' errors
+                            const studentName = String(student.name || student.firstname || "Student");
+                            const studentEmail = String(student.email || "No email");
+                            const studentIntro = String(student.introduction || student.intro || "No introduction provided.");
 
                             // Random colored avatar placeholder if no image
                             return (
