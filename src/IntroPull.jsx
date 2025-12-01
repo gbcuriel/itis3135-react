@@ -9,7 +9,7 @@ export default function IntroPull() {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const [itemsPerPage, setItemsPerPage] = useState(10);
 
     // --- 1. DATA FETCHING ---
     useEffect(() => {
@@ -59,19 +59,34 @@ export default function IntroPull() {
         if (typeof val === 'object') {
             if (val.rendered) return String(val.rendered);
             if (val.value) return String(val.value);
+
+            // Handle Name objects
             if (val.first || val.last) return [val.first, val.last].filter(Boolean).join(" ");
             if (val.firstName || val.lastName) return [val.firstName, val.lastName].filter(Boolean).join(" ");
             if (val.name) return String(val.name);
+
+            // Handle Computer objects (device, os)
+            if (val.device || val.os) return [val.device, val.os].filter(Boolean).join(", ");
+
             return JSON.stringify(val);
         }
         return String(val);
     };
 
     const getField = (student, ...keys) => {
+        // We search in the root student object, the 'acf' object (WordPress Advanced Custom Fields), and 'data'
         const sources = [student, student.acf, student.data].filter(Boolean);
+
         for (const source of sources) {
             for (const key of keys) {
-                const val = source[key];
+                // Check exact match
+                let val = source[key];
+
+                // If not found, try lowercase variation if the key passed was Title Case
+                if ((val === undefined || val === null) && typeof key === 'string') {
+                    val = source[key.toLowerCase()] || source[key.replace(/\s+/g, '_').toLowerCase()];
+                }
+
                 if (val !== undefined && val !== null && val !== "") {
                     return extractTextFromValue(val);
                 }
@@ -84,7 +99,12 @@ export default function IntroPull() {
         const sources = [student, student.acf, student.data].filter(Boolean);
         for (const source of sources) {
             for (const key of keys) {
-                const val = source[key];
+                let val = source[key];
+                // If not found, try lowercase variation
+                if ((val === undefined || val === null) && typeof key === 'string') {
+                    val = source[key.toLowerCase()] || source[key.replace(/\s+/g, '_').toLowerCase()];
+                }
+
                 if (Array.isArray(val)) return val;
                 if (typeof val === 'string' && val.includes(',')) return val.split(',').map(s => s.trim());
             }
@@ -101,26 +121,19 @@ export default function IntroPull() {
         return `${firstInitial}${lastName}@charlotte.edu`;
     };
 
-    // Helper to remove surrounding quotes and extra whitespace
     const cleanQuoteString = (str) => {
         if (!str) return "";
         return str.trim().replace(/^["“'‘\s]+|["”'’\s]+$/g, '');
     };
 
-    // UPDATED Helper: Resolve Image URL using 'media.src'
     const resolveImage = (student) => {
         let foundImage = null;
-
-        // Priority 1: Check the specific structure from your JSON (student.media.src)
         if (student.media && student.media.src) {
             foundImage = student.media.src;
         }
-
-        // Priority 2: Fallback to searching other keys/locations
         if (!foundImage) {
             const sources = [student, student.acf, student.data].filter(Boolean);
             const imageKeys = ['image', 'avatar', 'photo', 'picture', 'featured_image', 'featured_media_src_url'];
-
             for (const source of sources) {
                 for (const key of imageKeys) {
                     const val = source[key];
@@ -134,8 +147,6 @@ export default function IntroPull() {
                 if (foundImage) break;
             }
         }
-
-        // 3. Process URL (Handle relative paths by prepending domain)
         if (foundImage) {
             if (foundImage.startsWith('/')) {
                 return `https://dvonb.xyz${foundImage}`;
@@ -148,21 +159,14 @@ export default function IntroPull() {
     // --- 3. FILTERING & PAGINATION ---
     const filteredStudents = students.filter(student => {
         if (!student) return false;
-        const name = getField(student, "name", "student_name", "firstName", "firstname", "title", "full_name") || "";
-        let email = getField(student, "email", "user_email", "student_email", "contact_email");
-        if (!email && name) email = generateEmail(name);
+        const name = getField(student, "name", "student_name", "firstName", "full_name") || "";
+        const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
+        const bg = getField(student, "personal_background", "background");
 
-        // Check both intro and quote fields for search terms
-        const intro = getField(student, "introduction", "intro", "bio", "description", "about_me", "personalStatement");
-        const quote = getField(student, "quote", "tagline", "favorite_quote");
-
-        const sName = (name || "").toLowerCase();
-        const sEmail = (email || "").toLowerCase();
-        const sIntro = (intro || "").toLowerCase();
-        const sQuote = (quote || "").toLowerCase();
         const term = searchTerm.toLowerCase();
-
-        return sName.includes(term) || sEmail.includes(term) || sIntro.includes(term) || sQuote.includes(term);
+        return (name && name.toLowerCase().includes(term)) ||
+            (intro && intro.toLowerCase().includes(term)) ||
+            (bg && bg.toLowerCase().includes(term));
     });
 
     const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
@@ -172,8 +176,6 @@ export default function IntroPull() {
     const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
     // --- 4. RENDER ---
-
-    // Styles updated to match user request (Gradient Black->Red, Orange accents)
     const styles = `
     .cm-wrapper {
         font-family: 'Segoe UI', Arial, sans-serif;
@@ -190,20 +192,11 @@ export default function IntroPull() {
         padding: 2rem;
         color: #fff;
     }
-    
     .cm-nav a {
         color: #ffb07c;
         text-decoration: none;
         font-weight: bold;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
     }
-    .cm-nav a:hover {
-        color: #ffffff;
-        text-decoration: underline;
-    }
-
     .cm-header {
         text-align: center;
         margin-bottom: 3rem;
@@ -215,213 +208,182 @@ export default function IntroPull() {
     }
     .cm-subtitle {
         margin-top: 0.5rem;
-        font-size: 1.2rem;
         color: #ffb07c;
     }
-
-    .cm-search-container {
+    
+    /* Controls */
+    .cm-controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 3rem;
+    }
+    .cm-search-input {
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.3);
         border-radius: 8px;
         padding: 0.75rem;
-        margin: 0 auto 2rem auto;
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        max-width: 600px;
-    }
-    .cm-search-input {
-        background: transparent;
-        border: none;
         color: white;
         width: 100%;
+        max-width: 400px;
         font-size: 1rem;
-        outline: none;
-        font-family: inherit;
     }
-    .cm-search-input::placeholder {
-        color: rgba(255, 255, 255, 0.7);
+    .cm-select {
+        background-color: rgba(0, 0, 0, 0.4);
+        border: 1px solid rgba(255, 176, 124, 0.3);
+        color: white;
+        padding: 0.3rem 0.5rem;
+        border-radius: 5px;
+        cursor: pointer;
     }
-    .cm-search-count {
-        color: #ffb07c;
-        font-size: 0.9rem;
-        white-space: nowrap;
+    .cm-select option {
+        background-color: #000;
     }
 
+    /* List Layout */
     .cm-list {
         display: flex;
         flex-direction: column;
-        gap: 1.5rem;
+        gap: 4rem;
     }
+
+    /* Card Design */
     .cm-card {
         background-color: rgba(0, 0, 0, 0.4); 
         border: 1px solid rgba(255, 176, 124, 0.3);
         border-radius: 12px;
-        padding: 1.5rem;
+        padding: 3rem;
         display: flex;
-        gap: 1.5rem;
+        flex-direction: column;
         align-items: center;
-        transition: transform 0.2s, box-shadow 0.2s;
+        text-align: center;
     }
-    .cm-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        border-color: #ffb07c;
-    }
-    
-    .cm-avatar img, .cm-avatar-placeholder {
-        width: 100px;
-        height: 100px;
+    .cm-avatar img {
+        width: 500px;
+        max-width: 100%;
+        height: auto;
         border-radius: 8px;
-        object-fit: cover;
-        border: 2px solid #ffb07c;
-        background-color: #000;
+        border: 4px solid #ffb07c;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        margin-bottom: 1rem;
     }
     .cm-avatar-placeholder {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+    .cm-caption {
+        font-style: italic;
         color: #ffb07c;
-        font-size: 2rem;
+        margin-bottom: 1.5rem;
     }
     
-    .cm-content {
-        flex: 1;
-    }
-    .cm-name {
-        font-size: 1.3rem;
+    /* Updated Name Header Styles */
+    .cm-name-header {
+        font-size: 2rem;
         font-weight: 700;
-        margin: 0 0 0.5rem 0;
+        margin: 0 0 1.5rem 0;
         color: #ffffff;
+        text-align: center;
+        border-bottom: 2px solid #ffb07c;
+        padding-bottom: 0.5rem;
+        width: 100%;
+        max-width: 800px;
     }
-    .cm-intro {
+    .cm-mascot-divider {
+        color: #ffb07c;
+        margin: 0 0.5rem;
+    }
+    .cm-mascot {
+        color: #ffdcd1;
+        font-style: italic;
+    }
+
+    /* Content Sections */
+    .cm-content {
+        width: 100%;
+        max-width: 900px;
+        text-align: left;
+    }
+    .cm-main-intro {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        margin-bottom: 2rem;
+        text-align: center; /* Intro text centered like image */
+    }
+    
+    .cm-details-section {
+        margin-top: 1.5rem;
         font-size: 1rem;
-        color: #fff;
-        margin-bottom: 0.75rem;
         line-height: 1.5;
     }
-    .cm-quote {
-        font-style: italic;
+    .cm-label {
+        color: #ffffff;
+        font-weight: 800;
+        margin-right: 0.5rem;
+    }
+    .cm-value {
         color: #ffdcd1;
-        font-size: 0.95rem;
-        margin-bottom: 1rem;
-        border-left: 3px solid #ffb07c;
-        padding-left: 0.75rem;
     }
-    .cm-author {
-        font-style: normal;
+
+    .cm-courses-list {
+        margin-top: 0.5rem;
+        padding-left: 0;
+        list-style: none;
+    }
+    .cm-course-item {
+        margin-bottom: 0.3rem;
+        color: #ffdcd1;
+    }
+
+    .cm-quote {
+        margin-top: 3rem;
+        padding-top: 2rem;
+        border-top: 1px solid rgba(255, 176, 124, 0.2);
+        font-style: italic;
+        text-align: center;
         color: #ffb07c;
-        font-size: 0.85rem;
-        margin-left: 0.5rem;
+        font-size: 1.1rem;
     }
 
-    .cm-pills {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-    }
-    .cm-pill {
-        background-color: #c74646; 
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        border: 1px solid rgba(255,255,255,0.2);
-    }
-
+    /* Pagination */
     .cm-pagination {
         margin-top: 3rem;
         display: flex;
         justify-content: center;
-        gap: 1rem;
-        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
     }
     .cm-btn {
         background: #c74646;
         border: 1px solid white;
         color: white;
-        padding: 0.5rem 1.2rem;
+        padding: 0.5rem 1rem;
         border-radius: 5px;
         cursor: pointer;
-        font-family: inherit;
-        font-weight: bold;
-        transition: background 0.2s;
     }
     .cm-btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
-        background: #555;
     }
-    .cm-btn:hover:not(:disabled) {
-        background: #a33333;
-    }
+    `;
 
-    @media (max-width: 640px) {
-        .cm-card {
-            flex-direction: column;
-            text-align: center;
-        }
-        .cm-pills {
-            justify-content: center;
-        }
-        .cm-header h2 {
-            font-size: 1.8rem;
-        }
-        .cm-container {
-            width: 100%;
-            padding: 1rem;
-            border-radius: 0;
-        }
-        .cm-quote {
-            border-left: none;
-            border-top: 1px solid #ffb07c;
-            padding-left: 0;
-            padding-top: 0.5rem;
-        }
-    }
-  `;
-
-    if (loading) return (
-        <>
-            <style>{styles}</style>
-            <div className="cm-wrapper">
-                <div className="cm-container" style={{ textAlign: 'center', paddingTop: '4rem' }}>
-                    Loading directory...
-                </div>
-            </div>
-        </>
-    );
-
-    if (error) return (
-        <>
-            <style>{styles}</style>
-            <div className="cm-wrapper">
-                <div className="cm-container" style={{ textAlign: 'center' }}>
-                    <h3>Error</h3>
-                    <p>{error}</p>
-                    <a href="/" style={{ justifyContent: 'center' }}>Return Home</a>
-                </div>
-            </div>
-        </>
-    );
+    if (loading) return <div className="cm-wrapper" style={{ color: 'white', textAlign: 'center' }}>Loading...</div>;
+    if (error) return <div className="cm-wrapper" style={{ color: 'red', textAlign: 'center' }}>{error}</div>;
 
     return (
         <>
             <style>{styles}</style>
             <div className="cm-wrapper">
                 <div className="cm-container">
-
-                    <div className="cm-nav">
-                        <a href="/">← Back to Home</a>
-                    </div>
+                    <div className="cm-nav"><a href="/">← Back to Home</a></div>
 
                     <div className="cm-header">
                         <h2 className="cm-title">Meet the Class</h2>
                         <p className="cm-subtitle">ITIS 3135 Student Directory</p>
                     </div>
 
-                    <div className="cm-search-container">
-                        <span style={{ color: '#ffb07c' }}>🔍</span>
+                    <div className="cm-controls">
                         <input
                             type="text"
                             className="cm-search-input"
@@ -429,147 +391,245 @@ export default function IntroPull() {
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         />
-                        <div className="cm-search-count">
-                            {filteredStudents.length} Students
+                        <div>
+                            <span style={{ color: '#ffb07c' }}>Show </span>
+                            <select className="cm-select" value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
+                                <option value={5}>5</option>
+                                <option value={10}>10</option>
+                                <option value={20}>20</option>
+                                <option value={50}>50</option>
+                            </select>
+                            <span style={{ color: '#ffb07c' }}> per page</span>
                         </div>
+                        <div style={{ color: '#ffb07c' }}>{filteredStudents.length} Students found</div>
                     </div>
 
-                    <div className="cm-list">
-                        {filteredStudents.length > 0 ? (
-                            currentStudents.map((student, index) => {
-                                const name = getField(student, "name", "student_name", "firstName", "firstname", "title", "full_name") || "Anonymous";
-
-                                let email = getField(student, "email", "user_email", "student_email", "contact_email");
-                                if (!email || email === "No Email") email = generateEmail(name);
-
-                                const intro = getField(student, "introduction", "intro", "bio", "description", "about_me", "personalStatement") || "";
-
-                                // Parse Quote Logic
-                                let rawQuote = getField(student, "quote", "tagline", "favorite_quote") || "";
-                                let quote = "";
-                                let quoteAuthor = getField(student, "quote_author", "author") || "";
-
-                                if (rawQuote && typeof rawQuote === 'string' && rawQuote.trim().startsWith('{')) {
-                                    try {
-                                        const parsed = JSON.parse(rawQuote);
-                                        if (parsed && typeof parsed === 'object') {
-                                            if (parsed.text) quote = parsed.text;
-                                            if (parsed.author) quoteAuthor = parsed.author;
-                                        }
-                                    } catch (e) {
-                                        quote = rawQuote;
-                                    }
-                                } else {
-                                    quote = rawQuote;
-                                }
-
-                                quote = cleanQuoteString(quote);
-
-                                const courses = getArrayField(student, "courses", "classes", "enrolled", "tags", "subjects");
-                                const displayTags = courses.length > 0 ? courses : [email, "ITIS 3135"];
-
-                                // Use updated helper to find image at media.src
-                                const image = resolveImage(student);
-
-                                return (
-                                    <div key={student.id || index} className="cm-card">
-                                        <div className="cm-avatar">
-                                            {image ? (
-                                                <img
-                                                    src={image}
-                                                    alt={name}
-                                                    onError={(e) => {
-                                                        e.target.onerror = null;
-                                                        e.target.src = `https://ui-avatars.com/api/?name=${name}&background=ffb07c&color=000`;
-                                                    }}
-                                                />
-                                            ) : (
-                                                <div className="cm-avatar-placeholder">
-                                                    <span>👤</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="cm-content">
-                                            <h3 className="cm-name">{name}</h3>
-
-                                            {intro && <div className="cm-intro">{intro}</div>}
-
-                                            {quote && (
-                                                <div className="cm-quote">
-                                                    "{quote}"
-                                                    {quoteAuthor && <span className="cm-author">— {quoteAuthor}</span>}
-                                                </div>
-                                            )}
-
-                                            {!intro && !quote && <div className="cm-intro" style={{ opacity: 0.7, fontStyle: 'italic' }}>No details provided.</div>}
-
-                                            <div className="cm-pills">
-                                                {displayTags.map((tag, idx) => {
-                                                    let label = tag;
-                                                    if (typeof tag === 'object' && tag !== null) {
-                                                        const dept = tag.dept || "";
-                                                        const num = tag.num || "";
-                                                        const title = tag.title || tag.name || "";
-
-                                                        if (dept && num) {
-                                                            label = `${dept} ${num}`;
-                                                            if (title) label += ` — ${title}`;
-                                                        } else if (title) {
-                                                            label = title;
-                                                        } else if (tag.code) {
-                                                            label = tag.code;
-                                                        } else {
-                                                            label = "Class";
-                                                        }
-                                                    }
-                                                    return <span key={idx} className="cm-pill">{label}</span>;
-                                                })}
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        ) : (
-                            <div style={{ textAlign: 'center', padding: '3rem', border: '1px dashed #ffb07c', borderRadius: '8px', color: '#ffb07c' }}>
-                                No students found.
-                            </div>
-                        )}
-                    </div>
-
+                    {/* Top Pagination */}
                     {filteredStudents.length > itemsPerPage && (
-                        <div className="cm-pagination">
-                            <button
-                                className="cm-btn"
-                                onClick={() => paginate(currentPage - 1)}
-                                disabled={currentPage === 1}
-                            >
-                                Previous
-                            </button>
-                            <span style={{ color: '#ffb07c' }}>Page {currentPage} of {totalPages}</span>
-                            <button
-                                className="cm-btn"
-                                onClick={() => paginate(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                            >
-                                Next
-                            </button>
+                        <div className="cm-pagination" style={{ marginBottom: '2rem' }}>
+                            <button className="cm-btn" onClick={() => paginate(1)} disabled={currentPage === 1}>First</button>
+                            <button className="cm-btn" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1}>Prev</button>
+                            <span style={{ padding: '0.5rem', color: '#ffb07c' }}>{currentPage} / {totalPages}</span>
+                            <button className="cm-btn" onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages}>Next</button>
+                            <button className="cm-btn" onClick={() => paginate(totalPages)} disabled={currentPage === totalPages}>Last</button>
                         </div>
                     )}
 
-                    <div style={{ marginTop: '3rem', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '1rem' }}>
-                        <button
-                            onClick={() => setShowDebug(!showDebug)}
-                            style={{ background: 'none', border: 'none', color: '#ffb07c', fontSize: '0.8rem', cursor: 'pointer' }}
-                        >
-                            {showDebug ? "Hide" : "Show"} Debug Info
-                        </button>
-                        {showDebug && (
-                            <pre style={{ textAlign: 'left', background: '#222', color: '#ffb07c', padding: '1rem', overflow: 'auto', maxHeight: '300px', marginTop: '1rem', fontSize: '0.75rem', borderRadius: '5px' }}>
-                                {JSON.stringify(rawData, null, 2)}
-                            </pre>
-                        )}
+                    <div className="cm-list">
+                        {currentStudents.map((student, index) => {
+                            const name = getField(student, "name", "full_name", "firstName") || "Student";
+                            const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
+                            const caption = getField(student, "caption", "image_caption", "location");
+                            const image = resolveImage(student);
+
+                            // --- ROBUST BACKGROUND EXTRACTION ---
+                            let backgroundObj = null;
+                            const possibleSources = [student, student.acf, student.data].filter(Boolean);
+
+                            for (const src of possibleSources) {
+                                // Try "background" (lowercase) or "Background" (Title Case)
+                                let bg = src.background || src.Background;
+                                if (bg) {
+                                    // Parse if string
+                                    if (typeof bg === 'string' && bg.trim().startsWith('{')) {
+                                        try {
+                                            bg = JSON.parse(bg);
+                                        } catch (e) {
+                                            // ignore parse error
+                                        }
+                                    }
+                                    // If we found an object, use it
+                                    if (typeof bg === 'object') {
+                                        backgroundObj = bg;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // 1. Personal Background
+                            let personalBackground = backgroundObj?.personal || backgroundObj?.Personal;
+                            // Fallback to top-level fields
+                            if (!personalBackground) {
+                                personalBackground = getField(student,
+                                    "personal", "Personal",
+                                    "personal_background", "Personal Background",
+                                    "personal_bio", "Personal Bio"
+                                );
+                            }
+
+                            // 2. Professional Background
+                            let professionalBackground = backgroundObj?.professional || backgroundObj?.Professional;
+                            if (!professionalBackground) {
+                                professionalBackground = getField(student,
+                                    "professional", "Professional",
+                                    "professional_background", "Professional Background",
+                                    "work_experience", "Work Experience",
+                                    "job", "Job"
+                                );
+                            }
+
+                            // 3. Academic Background
+                            let academicBackground = backgroundObj?.academic || backgroundObj?.Academic;
+                            if (!academicBackground) {
+                                academicBackground = getField(student,
+                                    "academic", "Academic",
+                                    "academic_background", "Academic Background",
+                                    "academic_history", "Academic History",
+                                    "education", "Education",
+                                    "major", "Major"
+                                );
+                            }
+
+                            // Computer
+                            const computer = getField(student,
+                                "primary_computer", "Primary Computer",
+                                "computer_platform", "Computer Platform",
+                                "computer_os", "Computer OS",
+                                "computer", "Computer",
+                                "platform", "Platform"
+                            );
+
+                            // Funny Item
+                            const funnyItem = getField(student,
+                                "funny_item", "Funny Item",
+                                "interesting_item", "Interesting Item",
+                                "item_to_remember_me_by", "Item to Remember Me By",
+                                "fun_fact", "Fun Fact"
+                            );
+
+                            // Mascot and Divider
+                            const mascot = getField(student, "mascot", "Mascot", "mascot_name", "animal");
+                            const divider = getField(student, "separator", "Separator", "separation_string", "divider") || "||";
+
+                            // Courses Processing
+                            const coursesRaw = getArrayField(student,
+                                "courses", "Courses",
+                                "courses_taking", "Courses Taking",
+                                "courses_i'm_taking, _&_why", "Courses I'm Taking, & Why", // Handle the complex key
+                                "classes", "Classes"
+                            );
+
+                            let coursesList = [];
+                            if (coursesRaw && coursesRaw.length > 0) {
+                                coursesList = coursesRaw.map(c => {
+                                    if (typeof c === 'string') return c;
+                                    // Handle object structure if exists
+                                    let str = "";
+                                    if (c.code || c.course_code) str += (c.code || c.course_code);
+                                    if (c.title || c.course_title) str += ` - ${c.title || c.course_title}`;
+                                    if (c.reason || c.why) str += `: ${c.reason || c.why}`;
+                                    // Fallback if the above keys miss
+                                    if (str === "") str = JSON.stringify(c).replace(/["{}]/g, '');
+                                    return str;
+                                });
+                            }
+
+                            // Quote Processing
+                            let quote = getField(student, "quote", "Favorite Quote", "favorite_quote");
+                            let quoteAuthor = getField(student, "quote_author", "Quote Author", "author");
+                            // Simple JSON parse check for quote object
+                            if (quote && quote.trim().startsWith('{')) {
+                                try {
+                                    const parsed = JSON.parse(quote);
+                                    if (parsed.text) quote = parsed.text;
+                                    if (parsed.author) quoteAuthor = parsed.author;
+                                } catch (e) { }
+                            }
+                            quote = cleanQuoteString(quote);
+
+                            return (
+                                <div key={index} className="cm-card">
+
+                                    {/* Name Header with Mascot */}
+                                    <h3 className="cm-name-header">
+                                        {name}
+                                        {mascot && (
+                                            <>
+                                                <span className="cm-mascot-divider">{divider}</span>
+                                                <span className="cm-mascot">{mascot}</span>
+                                            </>
+                                        )}
+                                    </h3>
+
+                                    <div className="cm-avatar">
+                                        {image ? <img src={image} alt={name} /> : <div className="cm-avatar-placeholder">👤</div>}
+                                    </div>
+
+                                    {caption && <div className="cm-caption">{caption}</div>}
+
+                                    <div className="cm-content">
+                                        {/* Main Intro */}
+                                        {intro && <div className="cm-main-intro" dangerouslySetInnerHTML={{ __html: intro }} />}
+
+                                        {/* Detailed Sections (Platform, Backgrounds, Academic) */}
+                                        {personalBackground && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Personal Background:</span>
+                                                <span className="cm-value">{personalBackground}</span>
+                                            </div>
+                                        )}
+
+                                        {professionalBackground && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Professional Background:</span>
+                                                <span className="cm-value">{professionalBackground}</span>
+                                            </div>
+                                        )}
+
+                                        {academicBackground && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Academic Background:</span>
+                                                <span className="cm-value">{academicBackground}</span>
+                                            </div>
+                                        )}
+
+                                        {computer && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Primary Computer:</span>
+                                                <span className="cm-value">{computer}</span>
+                                            </div>
+                                        )}
+
+                                        {/* Courses List */}
+                                        {coursesList.length > 0 && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Courses I'm Taking, & Why:</span>
+                                                <ul className="cm-courses-list">
+                                                    {coursesList.map((c, i) => (
+                                                        <li key={i} className="cm-course-item">{c}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {funnyItem && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Funny/Interesting Item to Remember Me by:</span>
+                                                <span className="cm-value">{funnyItem}</span>
+                                            </div>
+                                        )}
+
+                                        {quote && (
+                                            <div className="cm-quote">
+                                                "{quote}" {quoteAuthor && <span>~ {quoteAuthor}</span>}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
 
+                    {/* Bottom Pagination */}
+                    {filteredStudents.length > itemsPerPage && (
+                        <div className="cm-pagination">
+                            <button className="cm-btn" onClick={() => paginate(1)} disabled={currentPage === 1}>First</button>
+                            <button className="cm-btn" onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1}>Prev</button>
+                            <span style={{ padding: '0.5rem', color: '#ffb07c' }}>{currentPage} / {totalPages}</span>
+                            <button className="cm-btn" onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages}>Next</button>
+                            <button className="cm-btn" onClick={() => paginate(totalPages)} disabled={currentPage === totalPages}>Last</button>
+                        </div>
+                    )}
                 </div>
             </div>
         </>
