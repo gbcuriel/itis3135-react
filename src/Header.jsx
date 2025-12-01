@@ -14,6 +14,9 @@ export default function Header() {
         case '/Introduction':
             pageTitle = "Introduction";
             break;
+        case '/IntroPull':
+            pageTitle = "JSON Pull";
+            break;
         default:
             pageTitle = "";
     }
