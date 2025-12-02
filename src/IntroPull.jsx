@@ -9,7 +9,7 @@ export default function IntroPull() {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const [itemsPerPage, setItemsPerPage] = useState(10);
+    const [itemsPerPage, setItemsPerPage] = useState(5);
 
     // --- 1. DATA FETCHING ---
     useEffect(() => {
@@ -161,12 +161,14 @@ export default function IntroPull() {
         if (!student) return false;
         const name = getField(student, "name", "student_name", "firstName", "full_name") || "";
         const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
-        const bg = getField(student, "personal_background", "background");
+
+        // Update filtering to search inside the new background object if possible
+        // Ideally we search the extracted string, but for simplicity here we rely on the main getField fallback
+        // or just the intro/name/email for search to keep it fast.
 
         const term = searchTerm.toLowerCase();
         return (name && name.toLowerCase().includes(term)) ||
-            (intro && intro.toLowerCase().includes(term)) ||
-            (bg && bg.toLowerCase().includes(term));
+            (intro && intro.toLowerCase().includes(term));
     });
 
     const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
@@ -394,9 +396,9 @@ export default function IntroPull() {
                         <div>
                             <span style={{ color: '#ffb07c' }}>Show </span>
                             <select className="cm-select" value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
+                                <option value={1}>1</option>
                                 <option value={5}>5</option>
                                 <option value={10}>10</option>
-                                <option value={20}>20</option>
                                 <option value={50}>50</option>
                             </select>
                             <span style={{ color: '#ffb07c' }}> per page</span>
@@ -422,13 +424,14 @@ export default function IntroPull() {
                             const caption = getField(student, "caption", "image_caption", "location");
                             const image = resolveImage(student);
 
-                            // --- ROBUST BACKGROUND EXTRACTION ---
+                            // --- IMPROVED BACKGROUND EXTRACTION ---
                             let backgroundObj = null;
                             const possibleSources = [student, student.acf, student.data].filter(Boolean);
 
                             for (const src of possibleSources) {
-                                // Try "background" (lowercase) or "Background" (Title Case)
-                                let bg = src.background || src.Background;
+                                // Check for "backgrounds" (plural) or "background" (singular)
+                                let bg = src.backgrounds || src.Backgrounds || src.background || src.Background;
+
                                 if (bg) {
                                     // Parse if string
                                     if (typeof bg === 'string' && bg.trim().startsWith('{')) {
@@ -490,11 +493,11 @@ export default function IntroPull() {
                             );
 
                             // Funny Item
-                            const funnyItem = getField(student,
+                            const funFact = getField(student,
                                 "funny_item", "Funny Item",
                                 "interesting_item", "Interesting Item",
                                 "item_to_remember_me_by", "Item to Remember Me By",
-                                "fun_fact", "Fun Fact"
+                                "fun_fact", "funFact"
                             );
 
                             // Mascot and Divider
@@ -511,16 +514,35 @@ export default function IntroPull() {
 
                             let coursesList = [];
                             if (coursesRaw && coursesRaw.length > 0) {
-                                coursesList = coursesRaw.map(c => {
-                                    if (typeof c === 'string') return c;
-                                    // Handle object structure if exists
-                                    let str = "";
-                                    if (c.code || c.course_code) str += (c.code || c.course_code);
-                                    if (c.title || c.course_title) str += ` - ${c.title || c.course_title}`;
-                                    if (c.reason || c.why) str += `: ${c.reason || c.why}`;
-                                    // Fallback if the above keys miss
-                                    if (str === "") str = JSON.stringify(c).replace(/["{}]/g, '');
-                                    return str;
+                                coursesList = coursesRaw.map((c, i) => {
+                                    if (typeof c === 'string') {
+                                        // Attempt to identify course code at start (e.g., ITIS 3135 or ITIS-3135)
+                                        const match = c.match(/^([A-Z]{3,4}[\s-]?\d{3,4}[A-Z]?)(.*)$/);
+                                        if (match) {
+                                            return <span key={i}><strong>{match[1]}</strong>{match[2]}</span>;
+                                        }
+                                        return <span key={i}>{c}</span>;
+                                    }
+
+                                    // Handle object structure
+                                    const code = c.code || c.course_code;
+                                    const title = c.title || c.course_title;
+                                    const reason = c.reason || c.why;
+
+                                    if (code || title || reason) {
+                                        return (
+                                            <span key={i}>
+                                                {code && <strong>{code}</strong>}
+                                                {code && title && " - "}
+                                                {title}
+                                                {(code || title) && reason && ": "}
+                                                {reason}
+                                            </span>
+                                        );
+                                    }
+
+                                    // Fallback
+                                    return <span key={i}>{JSON.stringify(c).replace(/["{}]/g, '')}</span>;
                                 });
                             }
 
@@ -602,10 +624,10 @@ export default function IntroPull() {
                                             </div>
                                         )}
 
-                                        {funnyItem && (
+                                        {funFact && (
                                             <div className="cm-details-section">
                                                 <span className="cm-label">Funny/Interesting Item to Remember Me by:</span>
-                                                <span className="cm-value">{funnyItem}</span>
+                                                <span className="cm-value">{funFact}</span>
                                             </div>
                                         )}
 
