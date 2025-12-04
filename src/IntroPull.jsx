@@ -10,17 +10,19 @@ export default function IntroPull() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(5);
 
-    // --- NEW: Filter State ---
+    // --- FILTER STATE ---
+    // Default is FALSE. False means "This is NOT required."
+    // If you toggle it to TRUE, it becomes "This IS required."
     const [filters, setFilters] = useState({
-        name: true,
-        mascot: true,
-        image: true,
-        statement: true,
-        backgrounds: true,
-        classes: true,
-        extra: true, // Computer, Fun Fact
-        quote: true,
-        links: true
+        name: false,
+        mascot: false,
+        image: false,
+        statement: false,
+        backgrounds: false,
+        classes: false,
+        extra: false,
+        quote: false,
+        links: false
     });
 
     const toggleFilter = (key) => {
@@ -32,29 +34,18 @@ export default function IntroPull() {
         const fetchData = async () => {
             try {
                 const response = await fetch('https://dvonb.xyz/api/2025-fall/itis-3135/students?full=1');
-
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const data = await response.json();
                 setRawData(data);
 
                 let studentArray = [];
-                if (Array.isArray(data)) {
-                    studentArray = data;
-                } else if (data && typeof data === 'object') {
-                    if (Array.isArray(data.data)) {
-                        studentArray = data.data;
-                    } else if (Array.isArray(data.students)) {
-                        studentArray = data.students;
-                    } else {
-                        studentArray = Object.values(data);
-                    }
+                if (Array.isArray(data)) studentArray = data;
+                else if (data && typeof data === 'object') {
+                    if (Array.isArray(data.data)) studentArray = data.data;
+                    else if (Array.isArray(data.students)) studentArray = data.students;
+                    else studentArray = Object.values(data);
                 }
-
                 setStudents(studentArray);
-
             } catch (err) {
                 console.error("Fetch Error:", err);
                 setError("Failed to load data. " + err.message);
@@ -62,7 +53,6 @@ export default function IntroPull() {
                 setLoading(false);
             }
         };
-
         fetchData();
     }, []);
 
@@ -71,7 +61,6 @@ export default function IntroPull() {
         if (!val) return "";
         if (typeof val === 'string') return val;
         if (typeof val === 'number') return String(val);
-
         if (typeof val === 'object') {
             if (val.rendered) return String(val.rendered);
             if (val.value) return String(val.value);
@@ -115,46 +104,9 @@ export default function IntroPull() {
         return [];
     };
 
-    // --- NEW: Helper to find links (Github, LinkedIn, etc) ---
-    const getLinks = (student) => {
-        const links = [];
-        const sources = [student, student.acf, student.data].filter(Boolean);
-
-        // Define common link keys
-        const linkKeys = [
-            { key: 'github', label: 'GitHub' },
-            { key: 'linkedin', label: 'LinkedIn' },
-            { key: 'website', label: 'Website' },
-            { key: 'portfolio', label: 'Portfolio' },
-            { key: 'clt_web', label: 'CLT Web' },
-            { key: 'url', label: 'Link' }
-        ];
-
-        sources.forEach(source => {
-            linkKeys.forEach(item => {
-                // Try exact match or lowercase match
-                const val = source[item.key] || source[item.key.toLowerCase()];
-                if (val && typeof val === 'string' && val.startsWith('http')) {
-                    // Avoid duplicates
-                    if (!links.some(l => l.url === val)) {
-                        links.push({ label: item.label, url: val });
-                    }
-                }
-            });
-        });
-        return links;
-    };
-
-    const cleanQuoteString = (str) => {
-        if (!str) return "";
-        return str.trim().replace(/^["“'‘\s]+|["”'’\s]+$/g, '');
-    };
-
     const resolveImage = (student) => {
         let foundImage = null;
-        if (student.media && student.media.src) {
-            foundImage = student.media.src;
-        }
+        if (student.media && student.media.src) foundImage = student.media.src;
         if (!foundImage) {
             const sources = [student, student.acf, student.data].filter(Boolean);
             const imageKeys = ['image', 'avatar', 'photo', 'picture', 'featured_image', 'featured_media_src_url'];
@@ -172,22 +124,118 @@ export default function IntroPull() {
             }
         }
         if (foundImage) {
-            if (foundImage.startsWith('/')) {
-                return `https://dvonb.xyz${foundImage}`;
-            }
-            return foundImage;
+            return foundImage.startsWith('/') ? `https://dvonb.xyz${foundImage}` : foundImage;
         }
         return null;
     };
 
-    // --- 3. FILTERING & PAGINATION ---
+    const getLinks = (student) => {
+        const links = [];
+        const sources = [student, student.acf, student.data].filter(Boolean);
+        const linkKeys = [
+            { key: 'github', label: 'GitHub' },
+            { key: 'linkedin', label: 'LinkedIn' },
+            { key: 'website', label: 'Website' },
+            { key: 'portfolio', label: 'Portfolio' },
+            { key: 'clt_web', label: 'CLT Web' },
+            { key: 'url', label: 'Link' }
+        ];
+        sources.forEach(source => {
+            linkKeys.forEach(item => {
+                const val = source[item.key] || source[item.key.toLowerCase()];
+                if (val && typeof val === 'string' && val.startsWith('http')) {
+                    if (!links.some(l => l.url === val)) links.push({ label: item.label, url: val });
+                }
+            });
+        });
+        return links;
+    };
+
+    // Helper to check if ANY background info exists
+    const hasAnyBackground = (student) => {
+        // Check for the object
+        const possibleSources = [student, student.acf, student.data].filter(Boolean);
+        for (const src of possibleSources) {
+            let bg = src.backgrounds || src.Backgrounds || src.background || src.Background;
+
+            // If it's a string JSON, try to parse
+            if (typeof bg === 'string' && bg.trim().startsWith('{')) {
+                try { bg = JSON.parse(bg); } catch (e) { }
+            }
+
+            if (bg && typeof bg === 'object') {
+                if (bg.personal || bg.Personal || bg.professional || bg.Professional || bg.academic || bg.Academic) return true;
+            }
+        }
+
+        // Fallback to individual fields
+        const personal = getField(student, "personal", "Personal", "personal_background", "Personal Bio");
+        const pro = getField(student, "professional", "Professional", "work_experience", "Job");
+        const acad = getField(student, "academic", "Academic", "major", "Education");
+
+        return (personal || pro || acad);
+    };
+
+    // --- 3. FILTERING LOGIC ---
     const filteredStudents = students.filter(student => {
         if (!student) return false;
+
+        // A. Search Text Filter
         const name = getField(student, "name", "student_name", "firstName", "full_name") || "";
         const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
         const term = searchTerm.toLowerCase();
-        return (name && name.toLowerCase().includes(term)) ||
-            (intro && intro.toLowerCase().includes(term));
+        const matchesSearch = (name && name.toLowerCase().includes(term)) || (intro && intro.toLowerCase().includes(term));
+
+        if (!matchesSearch) return false;
+
+        // B. Checkbox Requirements
+        // If a filter is TRUE, the student MUST have that data.
+
+        if (filters.name) {
+            const val = getField(student, "name", "student_name", "firstName", "full_name");
+            if (!val) return false;
+        }
+
+        if (filters.mascot) {
+            const val = getField(student, "mascot", "Mascot", "mascot_name", "animal");
+            if (!val) return false;
+        }
+
+        if (filters.image) {
+            if (!resolveImage(student)) return false;
+        }
+
+        if (filters.statement) {
+            const val = getField(student, "introduction", "intro", "bio", "personalStatement");
+            if (!val) return false;
+        }
+
+        if (filters.backgrounds) {
+            if (!hasAnyBackground(student)) return false;
+        }
+
+        if (filters.classes) {
+            const arr = getArrayField(student, "courses", "Courses", "courses_taking", "classes", "Classes");
+            if (!arr || arr.length === 0) return false;
+        }
+
+        if (filters.extra) {
+            const comp = getField(student, "primary_computer", "computer", "platform");
+            const fun = getField(student, "funny_item", "fun_fact", "interesting_item");
+            if (!comp && !fun) return false;
+        }
+
+        if (filters.quote) {
+            const val = getField(student, "quote", "Favorite Quote", "favorite_quote");
+            if (!val) return false;
+        }
+
+        if (filters.links) {
+            const links = getLinks(student);
+            if (links.length === 0) return false;
+        }
+
+        return true;
     });
 
     const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
@@ -198,245 +246,43 @@ export default function IntroPull() {
 
     // --- 4. RENDER ---
     const styles = `
-    .cm-wrapper {
-        font-family: 'Segoe UI', Arial, sans-serif;
-        padding: 2rem 1rem;
-        min-height: 100vh;
-    }
-    .cm-container {
-        max-width: 1400px;
-        width: 90%;
-        margin: 0 auto;
-        background: linear-gradient(135deg, #000000 0%, #ff5e62 100%);
-        border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(255, 94, 98, 0.18);
-        padding: 2rem;
-        color: #fff;
-    }
-    .cm-nav a {
-        color: #ffb07c;
-        text-decoration: none;
-        font-weight: bold;
-    }
-    .cm-header {
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .cm-title {
-        font-size: 2.5rem;
-        margin: 0;
-        font-weight: bold;
-    }
-    .cm-subtitle {
-        margin-top: 0.5rem;
-        color: #ffb07c;
-    }
+    .cm-wrapper { font-family: 'Segoe UI', Arial, sans-serif; padding: 2rem 1rem; min-height: 100vh; }
+    .cm-container { max-width: 1400px; width: 90%; margin: 0 auto; background: linear-gradient(135deg, #000000 0%, #ff5e62 100%); border-radius: 20px; box-shadow: 0 8px 32px rgba(255, 94, 98, 0.18); padding: 2rem; color: #fff; }
+    .cm-nav a { color: #ffb07c; text-decoration: none; font-weight: bold; }
+    .cm-header { text-align: center; margin-bottom: 2rem; }
+    .cm-title { font-size: 2.5rem; margin: 0; font-weight: bold; }
+    .cm-subtitle { margin-top: 0.5rem; color: #ffb07c; }
+    .cm-controls { display: flex; flex-direction: column; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+    .cm-search-input { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; padding: 0.75rem; color: white; width: 100%; max-width: 400px; font-size: 1rem; }
     
-    /* Controls */
-    .cm-controls {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 1rem;
-        margin-bottom: 2rem;
-    }
-    .cm-search-input {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 8px;
-        padding: 0.75rem;
-        color: white;
-        width: 100%;
-        max-width: 400px;
-        font-size: 1rem;
-    }
-    
-    /* NEW: Checkbox Filter Styles */
-    .cm-filter-group {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 1rem;
-        margin: 1rem 0;
-        padding: 1rem;
-        background: rgba(0,0,0,0.3);
-        border-radius: 8px;
-    }
-    .cm-checkbox-label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        cursor: pointer;
-        font-size: 0.9rem;
-        color: #ffdcd1;
-        user-select: none;
-    }
-    .cm-checkbox-label input {
-        cursor: pointer;
-        accent-color: #ffb07c;
-        width: 16px;
-        height: 16px;
-    }
+    .cm-filter-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; margin: 1rem 0; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 8px; }
+    .cm-checkbox-label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; color: #ffdcd1; user-select: none; }
+    .cm-checkbox-label input { cursor: pointer; accent-color: #ffb07c; width: 16px; height: 16px; }
 
-    .cm-select {
-        background-color: rgba(0, 0, 0, 0.4);
-        border: 1px solid rgba(255, 176, 124, 0.3);
-        color: white;
-        padding: 0.3rem 0.5rem;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    .cm-select option {
-        background-color: #000;
-    }
-
-    /* List Layout */
-    .cm-list {
-        display: flex;
-        flex-direction: column;
-        gap: 4rem;
-    }
-
-    /* Card Design */
-    .cm-card {
-        background-color: rgba(0, 0, 0, 0.4); 
-        border: 1px solid rgba(255, 176, 124, 0.3);
-        border-radius: 12px;
-        padding: 3rem;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-    }
-    .cm-avatar img {
-        width: 500px;
-        max-width: 100%;
-        height: auto;
-        border-radius: 8px;
-        border: 4px solid #ffb07c;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        margin-bottom: 1rem;
-    }
-    .cm-avatar-placeholder {
-        font-size: 4rem;
-        margin-bottom: 1rem;
-    }
-    .cm-caption {
-        font-style: italic;
-        color: #ffb07c;
-        margin-bottom: 1.5rem;
-    }
-    
-    .cm-name-header {
-        font-size: 2rem;
-        font-weight: 700;
-        margin: 0 0 1.5rem 0;
-        color: #ffffff;
-        text-align: center;
-        border-bottom: 2px solid #ffb07c;
-        padding-bottom: 0.5rem;
-        width: 100%;
-        max-width: 800px;
-    }
-    .cm-mascot-divider {
-        color: #ffb07c;
-        margin: 0 0.5rem;
-    }
-    .cm-mascot {
-        color: #ffdcd1;
-        font-style: italic;
-    }
-
-    /* Content Sections */
-    .cm-content {
-        width: 100%;
-        max-width: 900px;
-        text-align: left;
-    }
-    .cm-main-intro {
-        font-size: 1.1rem;
-        line-height: 1.6;
-        margin-bottom: 2rem;
-        text-align: center; 
-    }
-    
-    .cm-details-section {
-        margin-top: 1.5rem;
-        font-size: 1rem;
-        line-height: 1.5;
-    }
-    .cm-label {
-        color: #ffffff;
-        font-weight: 800;
-        margin-right: 0.5rem;
-    }
-    .cm-value {
-        color: #ffdcd1;
-    }
-
-    .cm-courses-list {
-        margin-top: 0.5rem;
-        padding-left: 0;
-        list-style: none;
-    }
-    .cm-course-item {
-        margin-bottom: 0.3rem;
-        color: #ffdcd1;
-    }
-
-    /* NEW: Link Styles */
-    .cm-links-container {
-        margin-top: 1.5rem;
-        display: flex;
-        gap: 1rem;
-        justify-content: center;
-        flex-wrap: wrap;
-    }
-    .cm-link-btn {
-        background: transparent;
-        border: 1px solid #ffb07c;
-        color: #ffb07c;
-        padding: 0.4rem 0.8rem;
-        border-radius: 4px;
-        text-decoration: none;
-        transition: all 0.2s;
-        font-size: 0.9rem;
-    }
-    .cm-link-btn:hover {
-        background: #ffb07c;
-        color: #000;
-    }
-
-    .cm-quote {
-        margin-top: 3rem;
-        padding-top: 2rem;
-        border-top: 1px solid rgba(255, 176, 124, 0.2);
-        font-style: italic;
-        text-align: center;
-        color: #ffb07c;
-        font-size: 1.1rem;
-    }
-
-    /* Pagination */
-    .cm-pagination {
-        margin-top: 3rem;
-        display: flex;
-        justify-content: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-    .cm-btn {
-        background: #c74646;
-        border: 1px solid white;
-        color: white;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        cursor: pointer;
-    }
-    .cm-btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
+    .cm-select { background-color: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 176, 124, 0.3); color: white; padding: 0.3rem 0.5rem; border-radius: 5px; cursor: pointer; }
+    .cm-select option { background-color: #000; }
+    .cm-list { display: flex; flex-direction: column; gap: 4rem; }
+    .cm-card { background-color: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 176, 124, 0.3); border-radius: 12px; padding: 3rem; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .cm-avatar img { width: 500px; max-width: 100%; height: auto; border-radius: 8px; border: 4px solid #ffb07c; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin-bottom: 1rem; }
+    .cm-avatar-placeholder { font-size: 4rem; margin-bottom: 1rem; }
+    .cm-caption { font-style: italic; color: #ffb07c; margin-bottom: 1.5rem; }
+    .cm-name-header { font-size: 2rem; font-weight: 700; margin: 0 0 1.5rem 0; color: #ffffff; text-align: center; border-bottom: 2px solid #ffb07c; padding-bottom: 0.5rem; width: 100%; max-width: 800px; }
+    .cm-mascot-divider { color: #ffb07c; margin: 0 0.5rem; }
+    .cm-mascot { color: #ffdcd1; font-style: italic; }
+    .cm-content { width: 100%; max-width: 900px; text-align: left; }
+    .cm-main-intro { font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem; text-align: center; }
+    .cm-details-section { margin-top: 1.5rem; font-size: 1rem; line-height: 1.5; }
+    .cm-label { color: #ffffff; font-weight: 800; margin-right: 0.5rem; }
+    .cm-value { color: #ffdcd1; }
+    .cm-courses-list { margin-top: 0.5rem; padding-left: 0; list-style: none; }
+    .cm-course-item { margin-bottom: 0.3rem; color: #ffdcd1; }
+    .cm-links-container { margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+    .cm-link-btn { background: transparent; border: 1px solid #ffb07c; color: #ffb07c; padding: 0.4rem 0.8rem; border-radius: 4px; text-decoration: none; transition: all 0.2s; font-size: 0.9rem; }
+    .cm-link-btn:hover { background: #ffb07c; color: #000; }
+    .cm-quote { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid rgba(255, 176, 124, 0.2); font-style: italic; text-align: center; color: #ffb07c; font-size: 1.1rem; }
+    .cm-pagination { margin-top: 3rem; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
+    .cm-btn { background: #c74646; border: 1px solid white; color: white; padding: 0.5rem 1rem; border-radius: 5px; cursor: pointer; }
+    .cm-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     `;
 
     if (loading) return <div className="cm-wrapper" style={{ color: 'white', textAlign: 'center' }}>Loading...</div>;
@@ -463,37 +309,19 @@ export default function IntroPull() {
                             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         />
 
-                        {/* --- NEW: Checkbox Filters UI --- */}
+                        {/* FILTERS: "Filter by Requirement" */}
                         <div className="cm-filter-group">
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.name} onChange={() => toggleFilter('name')} /> Name
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.mascot} onChange={() => toggleFilter('mascot')} /> Mascot
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.image} onChange={() => toggleFilter('image')} /> Image
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.statement} onChange={() => toggleFilter('statement')} /> Personal Statement
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.backgrounds} onChange={() => toggleFilter('backgrounds')} /> Backgrounds
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.classes} onChange={() => toggleFilter('classes')} /> Classes
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.extra} onChange={() => toggleFilter('extra')} /> Extra Info
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.quote} onChange={() => toggleFilter('quote')} /> Quote
-                            </label>
-                            <label className="cm-checkbox-label">
-                                <input type="checkbox" checked={filters.links} onChange={() => toggleFilter('links')} /> Links
-                            </label>
+                            <span style={{ width: '100%', textAlign: 'center', marginBottom: '0.5rem', fontWeight: 'bold', color: '#ffb07c' }}>Require:</span>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.name} onChange={() => toggleFilter('name')} /> Name</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.mascot} onChange={() => toggleFilter('mascot')} /> Mascot</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.image} onChange={() => toggleFilter('image')} /> Image</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.statement} onChange={() => toggleFilter('statement')} /> Personal Statement</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.backgrounds} onChange={() => toggleFilter('backgrounds')} /> Backgrounds</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.classes} onChange={() => toggleFilter('classes')} /> Classes</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.extra} onChange={() => toggleFilter('extra')} /> Extra Info</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.quote} onChange={() => toggleFilter('quote')} /> Quote</label>
+                            <label className="cm-checkbox-label"><input type="checkbox" checked={filters.links} onChange={() => toggleFilter('links')} /> Links</label>
                         </div>
-                        {/* -------------------------------- */}
 
                         <div>
                             <span style={{ color: '#ffb07c' }}>Show </span>
@@ -508,7 +336,6 @@ export default function IntroPull() {
                         <div style={{ color: '#ffb07c' }}>{filteredStudents.length} Students found</div>
                     </div>
 
-                    {/* Top Pagination */}
                     {filteredStudents.length > itemsPerPage && (
                         <div className="cm-pagination" style={{ marginBottom: '2rem' }}>
                             <button className="cm-btn" onClick={() => paginate(1)} disabled={currentPage === 1}>First</button>
@@ -525,9 +352,8 @@ export default function IntroPull() {
                             const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
                             const caption = getField(student, "caption", "image_caption", "location");
                             const image = resolveImage(student);
-                            const links = getLinks(student); // Get links
+                            const links = getLinks(student);
 
-                            // --- Background Processing ---
                             let backgroundObj = null;
                             const possibleSources = [student, student.acf, student.data].filter(Boolean);
                             for (const src of possibleSources) {
@@ -536,34 +362,22 @@ export default function IntroPull() {
                                     if (typeof bg === 'string' && bg.trim().startsWith('{')) {
                                         try { bg = JSON.parse(bg); } catch (e) { }
                                     }
-                                    if (typeof bg === 'object') {
-                                        backgroundObj = bg;
-                                        break;
-                                    }
+                                    if (typeof bg === 'object') { backgroundObj = bg; break; }
                                 }
                             }
-
                             let personalBackground = backgroundObj?.personal || backgroundObj?.Personal;
-                            if (!personalBackground) personalBackground = getField(student, "personal", "Personal", "personal_background", "Personal Background", "personal_bio", "Personal Bio");
-
+                            if (!personalBackground) personalBackground = getField(student, "personal", "Personal", "personal_background", "Personal Bio");
                             let professionalBackground = backgroundObj?.professional || backgroundObj?.Professional;
-                            if (!professionalBackground) professionalBackground = getField(student, "professional", "Professional", "professional_background", "Professional Background", "work_experience", "Work Experience", "job", "Job");
-
+                            if (!professionalBackground) professionalBackground = getField(student, "professional", "Professional", "work_experience", "Job");
                             let academicBackground = backgroundObj?.academic || backgroundObj?.Academic;
-                            if (!academicBackground) academicBackground = getField(student, "academic", "Academic", "academic_background", "Academic Background", "academic_history", "Academic History", "education", "Education", "major", "Major");
+                            if (!academicBackground) academicBackground = getField(student, "academic", "Academic", "major", "Education");
 
-                            // Computer
-                            const computer = getField(student, "primary_computer", "Primary Computer", "computer_platform", "Computer Platform", "computer_os", "Computer OS", "computer", "Computer", "platform", "Platform");
-
-                            // Funny Item
-                            const funFact = getField(student, "funny_item", "Funny Item", "interesting_item", "Interesting Item", "item_to_remember_me_by", "Item to Remember Me By", "fun_fact", "funFact");
-
-                            // Mascot and Divider
+                            const computer = getField(student, "primary_computer", "computer", "platform");
+                            const funFact = getField(student, "funny_item", "fun_fact", "interesting_item");
                             const mascot = getField(student, "mascot", "Mascot", "mascot_name", "animal");
-                            const divider = getField(student, "separator", "Separator", "separation_string", "divider") || "||";
+                            const divider = getField(student, "separator", "Separator", "divider") || "||";
 
-                            // Courses Processing
-                            const coursesRaw = getArrayField(student, "courses", "Courses", "courses_taking", "Courses Taking", "courses_i'm_taking, _&_why", "Courses I'm Taking, & Why", "classes", "Classes");
+                            const coursesRaw = getArrayField(student, "courses", "Courses", "classes", "Classes");
                             let coursesList = [];
                             if (coursesRaw && coursesRaw.length > 0) {
                                 coursesList = coursesRaw.map((c, i) => {
@@ -582,7 +396,6 @@ export default function IntroPull() {
                                 });
                             }
 
-                            // Quote Processing
                             let quote = getField(student, "quote", "Favorite Quote", "favorite_quote");
                             let quoteAuthor = getField(student, "quote_author", "Quote Author", "author");
                             if (quote && quote.trim().startsWith('{')) {
@@ -592,41 +405,30 @@ export default function IntroPull() {
                                     if (parsed.author) quoteAuthor = parsed.author;
                                 } catch (e) { }
                             }
-                            quote = cleanQuoteString(quote);
+                            // Clean quotes
+                            if (quote) quote = quote.trim().replace(/^["“'‘\s]+|["”'’\s]+$/g, '');
 
                             return (
                                 <div key={index} className="cm-card">
+                                    <h3 className="cm-name-header">
+                                        {name}
+                                        {mascot && (
+                                            <>
+                                                <span className="cm-mascot-divider">{divider}</span>
+                                                <span className="cm-mascot">{mascot}</span>
+                                            </>
+                                        )}
+                                    </h3>
 
-                                    {/* --- Conditional Name --- */}
-                                    {filters.name && (
-                                        <h3 className="cm-name-header">
-                                            {name}
-                                            {/* --- Conditional Mascot --- */}
-                                            {filters.mascot && mascot && (
-                                                <>
-                                                    <span className="cm-mascot-divider">{divider}</span>
-                                                    <span className="cm-mascot">{mascot}</span>
-                                                </>
-                                            )}
-                                        </h3>
-                                    )}
-
-                                    {/* --- Conditional Image --- */}
-                                    {filters.image && (
-                                        <>
-                                            <div className="cm-avatar">
-                                                {image ? <img src={image} alt={name} /> : <div className="cm-avatar-placeholder">👤</div>}
-                                            </div>
-                                            {caption && <div className="cm-caption">{caption}</div>}
-                                        </>
-                                    )}
+                                    <div className="cm-avatar">
+                                        {image ? <img src={image} alt={name} /> : <div className="cm-avatar-placeholder">👤</div>}
+                                    </div>
+                                    {caption && <div className="cm-caption">{caption}</div>}
 
                                     <div className="cm-content">
-                                        {/* --- Conditional Personal Statement --- */}
-                                        {filters.statement && intro && <div className="cm-main-intro" dangerouslySetInnerHTML={{ __html: intro }} />}
+                                        {intro && <div className="cm-main-intro" dangerouslySetInnerHTML={{ __html: intro }} />}
 
-                                        {/* --- Conditional Backgrounds --- */}
-                                        {filters.backgrounds && (
+                                        {(personalBackground || professionalBackground || academicBackground) && (
                                             <>
                                                 {personalBackground && (
                                                     <div className="cm-details-section">
@@ -649,26 +451,20 @@ export default function IntroPull() {
                                             </>
                                         )}
 
-                                        {/* --- Conditional Extra Info (Computer / Fun Fact) --- */}
-                                        {filters.extra && (
-                                            <>
-                                                {computer && (
-                                                    <div className="cm-details-section">
-                                                        <span className="cm-label">Primary Computer:</span>
-                                                        <span className="cm-value">{computer}</span>
-                                                    </div>
-                                                )}
-                                                {funFact && (
-                                                    <div className="cm-details-section">
-                                                        <span className="cm-label">Funny/Interesting Item:</span>
-                                                        <span className="cm-value">{funFact}</span>
-                                                    </div>
-                                                )}
-                                            </>
+                                        {computer && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Primary Computer:</span>
+                                                <span className="cm-value">{computer}</span>
+                                            </div>
+                                        )}
+                                        {funFact && (
+                                            <div className="cm-details-section">
+                                                <span className="cm-label">Funny/Interesting Item:</span>
+                                                <span className="cm-value">{funFact}</span>
+                                            </div>
                                         )}
 
-                                        {/* --- Conditional Classes --- */}
-                                        {filters.classes && coursesList.length > 0 && (
+                                        {coursesList.length > 0 && (
                                             <div className="cm-details-section">
                                                 <span className="cm-label">Courses I'm Taking, & Why:</span>
                                                 <ul className="cm-courses-list">
@@ -679,8 +475,7 @@ export default function IntroPull() {
                                             </div>
                                         )}
 
-                                        {/* --- Conditional Links (New Feature) --- */}
-                                        {filters.links && links.length > 0 && (
+                                        {links.length > 0 && (
                                             <div className="cm-links-container">
                                                 {links.map((link, i) => (
                                                     <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="cm-link-btn">
@@ -690,8 +485,7 @@ export default function IntroPull() {
                                             </div>
                                         )}
 
-                                        {/* --- Conditional Quote --- */}
-                                        {filters.quote && quote && (
+                                        {quote && (
                                             <div className="cm-quote">
                                                 "{quote}" {quoteAuthor && <span>~ {quoteAuthor}</span>}
                                             </div>
@@ -702,7 +496,6 @@ export default function IntroPull() {
                         })}
                     </div>
 
-                    {/* Bottom Pagination */}
                     {filteredStudents.length > itemsPerPage && (
                         <div className="cm-pagination">
                             <button className="cm-btn" onClick={() => paginate(1)} disabled={currentPage === 1}>First</button>
