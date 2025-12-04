@@ -5,11 +5,27 @@ export default function IntroPull() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [rawData, setRawData] = useState(null);
-    const [showDebug, setShowDebug] = useState(false);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(5);
+
+    // --- NEW: Filter State ---
+    const [filters, setFilters] = useState({
+        name: true,
+        mascot: true,
+        image: true,
+        statement: true,
+        backgrounds: true,
+        classes: true,
+        extra: true, // Computer, Fun Fact
+        quote: true,
+        links: true
+    });
+
+    const toggleFilter = (key) => {
+        setFilters(prev => ({ ...prev, [key]: !prev[key] }));
+    };
 
     // --- 1. DATA FETCHING ---
     useEffect(() => {
@@ -59,34 +75,23 @@ export default function IntroPull() {
         if (typeof val === 'object') {
             if (val.rendered) return String(val.rendered);
             if (val.value) return String(val.value);
-
-            // Handle Name objects
             if (val.first || val.last) return [val.first, val.last].filter(Boolean).join(" ");
             if (val.firstName || val.lastName) return [val.firstName, val.lastName].filter(Boolean).join(" ");
             if (val.name) return String(val.name);
-
-            // Handle Computer objects (device, os)
             if (val.device || val.os) return [val.device, val.os].filter(Boolean).join(", ");
-
             return JSON.stringify(val);
         }
         return String(val);
     };
 
     const getField = (student, ...keys) => {
-        // We search in the root student object, the 'acf' object (WordPress Advanced Custom Fields), and 'data'
         const sources = [student, student.acf, student.data].filter(Boolean);
-
         for (const source of sources) {
             for (const key of keys) {
-                // Check exact match
                 let val = source[key];
-
-                // If not found, try lowercase variation if the key passed was Title Case
                 if ((val === undefined || val === null) && typeof key === 'string') {
                     val = source[key.toLowerCase()] || source[key.replace(/\s+/g, '_').toLowerCase()];
                 }
-
                 if (val !== undefined && val !== null && val !== "") {
                     return extractTextFromValue(val);
                 }
@@ -100,11 +105,9 @@ export default function IntroPull() {
         for (const source of sources) {
             for (const key of keys) {
                 let val = source[key];
-                // If not found, try lowercase variation
                 if ((val === undefined || val === null) && typeof key === 'string') {
                     val = source[key.toLowerCase()] || source[key.replace(/\s+/g, '_').toLowerCase()];
                 }
-
                 if (Array.isArray(val)) return val;
                 if (typeof val === 'string' && val.includes(',')) return val.split(',').map(s => s.trim());
             }
@@ -112,13 +115,34 @@ export default function IntroPull() {
         return [];
     };
 
-    const generateEmail = (nameStr) => {
-        if (!nameStr || nameStr === "Anonymous") return "No Email";
-        const parts = nameStr.trim().split(/\s+/);
-        if (parts.length < 1) return "No Email";
-        const firstInitial = parts[0].charAt(0).toLowerCase();
-        const lastName = parts[parts.length - 1].replace(/[^a-zA-Z]/g, "").toLowerCase();
-        return `${firstInitial}${lastName}@charlotte.edu`;
+    // --- NEW: Helper to find links (Github, LinkedIn, etc) ---
+    const getLinks = (student) => {
+        const links = [];
+        const sources = [student, student.acf, student.data].filter(Boolean);
+
+        // Define common link keys
+        const linkKeys = [
+            { key: 'github', label: 'GitHub' },
+            { key: 'linkedin', label: 'LinkedIn' },
+            { key: 'website', label: 'Website' },
+            { key: 'portfolio', label: 'Portfolio' },
+            { key: 'clt_web', label: 'CLT Web' },
+            { key: 'url', label: 'Link' }
+        ];
+
+        sources.forEach(source => {
+            linkKeys.forEach(item => {
+                // Try exact match or lowercase match
+                const val = source[item.key] || source[item.key.toLowerCase()];
+                if (val && typeof val === 'string' && val.startsWith('http')) {
+                    // Avoid duplicates
+                    if (!links.some(l => l.url === val)) {
+                        links.push({ label: item.label, url: val });
+                    }
+                }
+            });
+        });
+        return links;
     };
 
     const cleanQuoteString = (str) => {
@@ -161,11 +185,6 @@ export default function IntroPull() {
         if (!student) return false;
         const name = getField(student, "name", "student_name", "firstName", "full_name") || "";
         const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
-
-        // Update filtering to search inside the new background object if possible
-        // Ideally we search the extracted string, but for simplicity here we rely on the main getField fallback
-        // or just the intro/name/email for search to keep it fast.
-
         const term = searchTerm.toLowerCase();
         return (name && name.toLowerCase().includes(term)) ||
             (intro && intro.toLowerCase().includes(term));
@@ -201,7 +220,7 @@ export default function IntroPull() {
     }
     .cm-header {
         text-align: center;
-        margin-bottom: 3rem;
+        margin-bottom: 2rem;
     }
     .cm-title {
         font-size: 2.5rem;
@@ -219,7 +238,7 @@ export default function IntroPull() {
         flex-direction: column;
         align-items: center;
         gap: 1rem;
-        margin-bottom: 3rem;
+        margin-bottom: 2rem;
     }
     .cm-search-input {
         background: rgba(255, 255, 255, 0.1);
@@ -231,6 +250,34 @@ export default function IntroPull() {
         max-width: 400px;
         font-size: 1rem;
     }
+    
+    /* NEW: Checkbox Filter Styles */
+    .cm-filter-group {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+        margin: 1rem 0;
+        padding: 1rem;
+        background: rgba(0,0,0,0.3);
+        border-radius: 8px;
+    }
+    .cm-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        color: #ffdcd1;
+        user-select: none;
+    }
+    .cm-checkbox-label input {
+        cursor: pointer;
+        accent-color: #ffb07c;
+        width: 16px;
+        height: 16px;
+    }
+
     .cm-select {
         background-color: rgba(0, 0, 0, 0.4);
         border: 1px solid rgba(255, 176, 124, 0.3);
@@ -280,7 +327,6 @@ export default function IntroPull() {
         margin-bottom: 1.5rem;
     }
     
-    /* Updated Name Header Styles */
     .cm-name-header {
         font-size: 2rem;
         font-weight: 700;
@@ -311,7 +357,7 @@ export default function IntroPull() {
         font-size: 1.1rem;
         line-height: 1.6;
         margin-bottom: 2rem;
-        text-align: center; /* Intro text centered like image */
+        text-align: center; 
     }
     
     .cm-details-section {
@@ -336,6 +382,29 @@ export default function IntroPull() {
     .cm-course-item {
         margin-bottom: 0.3rem;
         color: #ffdcd1;
+    }
+
+    /* NEW: Link Styles */
+    .cm-links-container {
+        margin-top: 1.5rem;
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    .cm-link-btn {
+        background: transparent;
+        border: 1px solid #ffb07c;
+        color: #ffb07c;
+        padding: 0.4rem 0.8rem;
+        border-radius: 4px;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+    }
+    .cm-link-btn:hover {
+        background: #ffb07c;
+        color: #000;
     }
 
     .cm-quote {
@@ -393,6 +462,39 @@ export default function IntroPull() {
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         />
+
+                        {/* --- NEW: Checkbox Filters UI --- */}
+                        <div className="cm-filter-group">
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.name} onChange={() => toggleFilter('name')} /> Name
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.mascot} onChange={() => toggleFilter('mascot')} /> Mascot
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.image} onChange={() => toggleFilter('image')} /> Image
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.statement} onChange={() => toggleFilter('statement')} /> Personal Statement
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.backgrounds} onChange={() => toggleFilter('backgrounds')} /> Backgrounds
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.classes} onChange={() => toggleFilter('classes')} /> Classes
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.extra} onChange={() => toggleFilter('extra')} /> Extra Info
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.quote} onChange={() => toggleFilter('quote')} /> Quote
+                            </label>
+                            <label className="cm-checkbox-label">
+                                <input type="checkbox" checked={filters.links} onChange={() => toggleFilter('links')} /> Links
+                            </label>
+                        </div>
+                        {/* -------------------------------- */}
+
                         <div>
                             <span style={{ color: '#ffb07c' }}>Show </span>
                             <select className="cm-select" value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}>
@@ -423,25 +525,17 @@ export default function IntroPull() {
                             const intro = getField(student, "introduction", "intro", "bio", "personalStatement") || "";
                             const caption = getField(student, "caption", "image_caption", "location");
                             const image = resolveImage(student);
+                            const links = getLinks(student); // Get links
 
-                            // --- IMPROVED BACKGROUND EXTRACTION ---
+                            // --- Background Processing ---
                             let backgroundObj = null;
                             const possibleSources = [student, student.acf, student.data].filter(Boolean);
-
                             for (const src of possibleSources) {
-                                // Check for "backgrounds" (plural) or "background" (singular)
                                 let bg = src.backgrounds || src.Backgrounds || src.background || src.Background;
-
                                 if (bg) {
-                                    // Parse if string
                                     if (typeof bg === 'string' && bg.trim().startsWith('{')) {
-                                        try {
-                                            bg = JSON.parse(bg);
-                                        } catch (e) {
-                                            // ignore parse error
-                                        }
+                                        try { bg = JSON.parse(bg); } catch (e) { }
                                     }
-                                    // If we found an object, use it
                                     if (typeof bg === 'object') {
                                         backgroundObj = bg;
                                         break;
@@ -449,99 +543,41 @@ export default function IntroPull() {
                                 }
                             }
 
-                            // 1. Personal Background
                             let personalBackground = backgroundObj?.personal || backgroundObj?.Personal;
-                            // Fallback to top-level fields
-                            if (!personalBackground) {
-                                personalBackground = getField(student,
-                                    "personal", "Personal",
-                                    "personal_background", "Personal Background",
-                                    "personal_bio", "Personal Bio"
-                                );
-                            }
+                            if (!personalBackground) personalBackground = getField(student, "personal", "Personal", "personal_background", "Personal Background", "personal_bio", "Personal Bio");
 
-                            // 2. Professional Background
                             let professionalBackground = backgroundObj?.professional || backgroundObj?.Professional;
-                            if (!professionalBackground) {
-                                professionalBackground = getField(student,
-                                    "professional", "Professional",
-                                    "professional_background", "Professional Background",
-                                    "work_experience", "Work Experience",
-                                    "job", "Job"
-                                );
-                            }
+                            if (!professionalBackground) professionalBackground = getField(student, "professional", "Professional", "professional_background", "Professional Background", "work_experience", "Work Experience", "job", "Job");
 
-                            // 3. Academic Background
                             let academicBackground = backgroundObj?.academic || backgroundObj?.Academic;
-                            if (!academicBackground) {
-                                academicBackground = getField(student,
-                                    "academic", "Academic",
-                                    "academic_background", "Academic Background",
-                                    "academic_history", "Academic History",
-                                    "education", "Education",
-                                    "major", "Major"
-                                );
-                            }
+                            if (!academicBackground) academicBackground = getField(student, "academic", "Academic", "academic_background", "Academic Background", "academic_history", "Academic History", "education", "Education", "major", "Major");
 
                             // Computer
-                            const computer = getField(student,
-                                "primary_computer", "Primary Computer",
-                                "computer_platform", "Computer Platform",
-                                "computer_os", "Computer OS",
-                                "computer", "Computer",
-                                "platform", "Platform"
-                            );
+                            const computer = getField(student, "primary_computer", "Primary Computer", "computer_platform", "Computer Platform", "computer_os", "Computer OS", "computer", "Computer", "platform", "Platform");
 
                             // Funny Item
-                            const funFact = getField(student,
-                                "funny_item", "Funny Item",
-                                "interesting_item", "Interesting Item",
-                                "item_to_remember_me_by", "Item to Remember Me By",
-                                "fun_fact", "funFact"
-                            );
+                            const funFact = getField(student, "funny_item", "Funny Item", "interesting_item", "Interesting Item", "item_to_remember_me_by", "Item to Remember Me By", "fun_fact", "funFact");
 
                             // Mascot and Divider
                             const mascot = getField(student, "mascot", "Mascot", "mascot_name", "animal");
                             const divider = getField(student, "separator", "Separator", "separation_string", "divider") || "||";
 
                             // Courses Processing
-                            const coursesRaw = getArrayField(student,
-                                "courses", "Courses",
-                                "courses_taking", "Courses Taking",
-                                "courses_i'm_taking, _&_why", "Courses I'm Taking, & Why", // Handle the complex key
-                                "classes", "Classes"
-                            );
-
+                            const coursesRaw = getArrayField(student, "courses", "Courses", "courses_taking", "Courses Taking", "courses_i'm_taking, _&_why", "Courses I'm Taking, & Why", "classes", "Classes");
                             let coursesList = [];
                             if (coursesRaw && coursesRaw.length > 0) {
                                 coursesList = coursesRaw.map((c, i) => {
                                     if (typeof c === 'string') {
-                                        // Attempt to identify course code at start (e.g., ITIS 3135 or ITIS-3135)
                                         const match = c.match(/^([A-Z]{3,4}[\s-]?\d{3,4}[A-Z]?)(.*)$/);
-                                        if (match) {
-                                            return <span key={i}><strong>{match[1]}</strong>{match[2]}</span>;
-                                        }
+                                        if (match) return <span key={i}><strong>{match[1]}</strong>{match[2]}</span>;
                                         return <span key={i}>{c}</span>;
                                     }
-
-                                    // Handle object structure
                                     const code = c.code || c.course_code;
                                     const title = c.title || c.course_title;
                                     const reason = c.reason || c.why;
-
                                     if (code || title || reason) {
-                                        return (
-                                            <span key={i}>
-                                                {code && <strong>{code}</strong>}
-                                                {code && title && " - "}
-                                                {title}
-                                                {(code || title) && reason && ": "}
-                                                {reason}
-                                            </span>
-                                        );
+                                        return (<span key={i}>{code && <strong>{code}</strong>}{code && title && " - "}{title}{(code || title) && reason && ": "}{reason}</span>);
                                     }
-
-                                    // Fallback
                                     return <span key={i}>{JSON.stringify(c).replace(/["{}]/g, '')}</span>;
                                 });
                             }
@@ -549,7 +585,6 @@ export default function IntroPull() {
                             // Quote Processing
                             let quote = getField(student, "quote", "Favorite Quote", "favorite_quote");
                             let quoteAuthor = getField(student, "quote_author", "Quote Author", "author");
-                            // Simple JSON parse check for quote object
                             if (quote && quote.trim().startsWith('{')) {
                                 try {
                                     const parsed = JSON.parse(quote);
@@ -562,58 +597,78 @@ export default function IntroPull() {
                             return (
                                 <div key={index} className="cm-card">
 
-                                    {/* Name Header with Mascot */}
-                                    <h3 className="cm-name-header">
-                                        {name}
-                                        {mascot && (
-                                            <>
-                                                <span className="cm-mascot-divider">{divider}</span>
-                                                <span className="cm-mascot">{mascot}</span>
-                                            </>
-                                        )}
-                                    </h3>
+                                    {/* --- Conditional Name --- */}
+                                    {filters.name && (
+                                        <h3 className="cm-name-header">
+                                            {name}
+                                            {/* --- Conditional Mascot --- */}
+                                            {filters.mascot && mascot && (
+                                                <>
+                                                    <span className="cm-mascot-divider">{divider}</span>
+                                                    <span className="cm-mascot">{mascot}</span>
+                                                </>
+                                            )}
+                                        </h3>
+                                    )}
 
-                                    <div className="cm-avatar">
-                                        {image ? <img src={image} alt={name} /> : <div className="cm-avatar-placeholder">👤</div>}
-                                    </div>
-
-                                    {caption && <div className="cm-caption">{caption}</div>}
+                                    {/* --- Conditional Image --- */}
+                                    {filters.image && (
+                                        <>
+                                            <div className="cm-avatar">
+                                                {image ? <img src={image} alt={name} /> : <div className="cm-avatar-placeholder">👤</div>}
+                                            </div>
+                                            {caption && <div className="cm-caption">{caption}</div>}
+                                        </>
+                                    )}
 
                                     <div className="cm-content">
-                                        {/* Main Intro */}
-                                        {intro && <div className="cm-main-intro" dangerouslySetInnerHTML={{ __html: intro }} />}
+                                        {/* --- Conditional Personal Statement --- */}
+                                        {filters.statement && intro && <div className="cm-main-intro" dangerouslySetInnerHTML={{ __html: intro }} />}
 
-                                        {/* Detailed Sections (Platform, Backgrounds, Academic) */}
-                                        {personalBackground && (
-                                            <div className="cm-details-section">
-                                                <span className="cm-label">Personal Background:</span>
-                                                <span className="cm-value">{personalBackground}</span>
-                                            </div>
+                                        {/* --- Conditional Backgrounds --- */}
+                                        {filters.backgrounds && (
+                                            <>
+                                                {personalBackground && (
+                                                    <div className="cm-details-section">
+                                                        <span className="cm-label">Personal Background:</span>
+                                                        <span className="cm-value">{personalBackground}</span>
+                                                    </div>
+                                                )}
+                                                {professionalBackground && (
+                                                    <div className="cm-details-section">
+                                                        <span className="cm-label">Professional Background:</span>
+                                                        <span className="cm-value">{professionalBackground}</span>
+                                                    </div>
+                                                )}
+                                                {academicBackground && (
+                                                    <div className="cm-details-section">
+                                                        <span className="cm-label">Academic Background:</span>
+                                                        <span className="cm-value">{academicBackground}</span>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
 
-                                        {professionalBackground && (
-                                            <div className="cm-details-section">
-                                                <span className="cm-label">Professional Background:</span>
-                                                <span className="cm-value">{professionalBackground}</span>
-                                            </div>
+                                        {/* --- Conditional Extra Info (Computer / Fun Fact) --- */}
+                                        {filters.extra && (
+                                            <>
+                                                {computer && (
+                                                    <div className="cm-details-section">
+                                                        <span className="cm-label">Primary Computer:</span>
+                                                        <span className="cm-value">{computer}</span>
+                                                    </div>
+                                                )}
+                                                {funFact && (
+                                                    <div className="cm-details-section">
+                                                        <span className="cm-label">Funny/Interesting Item:</span>
+                                                        <span className="cm-value">{funFact}</span>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
 
-                                        {academicBackground && (
-                                            <div className="cm-details-section">
-                                                <span className="cm-label">Academic Background:</span>
-                                                <span className="cm-value">{academicBackground}</span>
-                                            </div>
-                                        )}
-
-                                        {computer && (
-                                            <div className="cm-details-section">
-                                                <span className="cm-label">Primary Computer:</span>
-                                                <span className="cm-value">{computer}</span>
-                                            </div>
-                                        )}
-
-                                        {/* Courses List */}
-                                        {coursesList.length > 0 && (
+                                        {/* --- Conditional Classes --- */}
+                                        {filters.classes && coursesList.length > 0 && (
                                             <div className="cm-details-section">
                                                 <span className="cm-label">Courses I'm Taking, & Why:</span>
                                                 <ul className="cm-courses-list">
@@ -624,14 +679,19 @@ export default function IntroPull() {
                                             </div>
                                         )}
 
-                                        {funFact && (
-                                            <div className="cm-details-section">
-                                                <span className="cm-label">Funny/Interesting Item to Remember Me by:</span>
-                                                <span className="cm-value">{funFact}</span>
+                                        {/* --- Conditional Links (New Feature) --- */}
+                                        {filters.links && links.length > 0 && (
+                                            <div className="cm-links-container">
+                                                {links.map((link, i) => (
+                                                    <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="cm-link-btn">
+                                                        {link.label}
+                                                    </a>
+                                                ))}
                                             </div>
                                         )}
 
-                                        {quote && (
+                                        {/* --- Conditional Quote --- */}
+                                        {filters.quote && quote && (
                                             <div className="cm-quote">
                                                 "{quote}" {quoteAuthor && <span>~ {quoteAuthor}</span>}
                                             </div>
